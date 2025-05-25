@@ -19,7 +19,7 @@ class FFmpegGUI(QWidget):
     def __init__(self):
         super().__init__()
         self.resize(900, 600)
-        self.setWindowTitle("Image Sequence to Video (FFmpeg + NVIDIA)")
+        self.setWindowTitle("Sadfish Alchemist 2025.1")
         self.layout = QVBoxLayout()
 
         # 1. Task Code at the top
@@ -47,6 +47,12 @@ class FFmpegGUI(QWidget):
 
         # Make take number column editable
         self.input_tree.itemChanged.connect(self._on_item_changed)
+
+        # --- Add Clear Queue button here ---
+        self.clear_queue_btn = QPushButton("Clear Queue")
+        self.clear_queue_btn.clicked.connect(self.clear_queue)
+        self.layout.addWidget(self.clear_queue_btn)
+        # --- End addition ---
 
         self.output_label = QLabel("Output Folder:")
         self.layout.addWidget(self.output_label)
@@ -236,6 +242,9 @@ class FFmpegGUI(QWidget):
             self, "Select Output Folder", options=options)
         if folder:
             self.output_path.setText(folder)
+
+    def clear_queue(self):
+        self.input_tree.clear()
 
     def _audio_file_has_audio(self, file):
         try:
