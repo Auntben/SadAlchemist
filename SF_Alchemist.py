@@ -97,9 +97,41 @@ class FFmpegGUI(QWidget):
             if os.path.isdir(path) and path not in existing_paths:
                 item = QListWidgetItem()
                 item.setData(Qt.ItemDataRole.UserRole, path)
+                item.setData(Qt.ItemDataRole.UserRole + 1, None)  # Audio path
                 widget = self._create_folder_widget(folder_name, item)
                 self.input_list.addItem(item)
                 self.input_list.setItemWidget(item, widget)
+
+    def _create_folder_widget(self, folder_name, item):
+        return FolderWidget(folder_name, item, self)
+
+    def _browse_audio(self, item, audio_label, folder_widget=None):
+        options = QFileDialog.Option.DontUseNativeDialog
+        file, _ = QFileDialog.getOpenFileName(
+            self, "Select Audio/Video File", "",
+            "Audio/Video Files (*.wav *.mp3 *.aac *.flac *.m4a *.ogg *.mp4 *.mov *.mkv *.avi *.webm *.m4v)", options=options)
+        if file:
+            has_audio = self._audio_file_has_audio(file)
+            item.setData(Qt.ItemDataRole.UserRole + 1, file if has_audio else None)
+            if folder_widget:
+                folder_widget.set_audio_file(file)
+            else:
+                if has_audio:
+                    audio_label.setText(os.path.basename(file))
+                    # audio_label.setStyleSheet("color: black;")
+                else:
+                    audio_label.setText(os.path.basename(file))
+                    audio_label.setStyleSheet("color: red;")
+
+    def _audio_file_has_audio(self, file):
+        try:
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_type", "-of", "csv=p=0", file],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
+            return "audio" in result.stdout
+        except Exception:
+            return False
 
     def run_ffmpeg_batch(self):
         output_dir = self.output_path.text()
@@ -112,15 +144,16 @@ class FFmpegGUI(QWidget):
             return
 
         folders = [self.input_list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.input_list.count())]
+        audio_files = [self.input_list.item(i).data(Qt.ItemDataRole.UserRole + 1) for i in range(self.input_list.count())]
         items = [self.input_list.item(i) for i in range(self.input_list.count())]
         if not folders:
             QMessageBox.critical(self, "Error", "No input folders selected.")
             return
 
-        for folder, item in zip(folders, items):
+        for folder, audio_file, item in zip(folders, audio_files, items):
             self.status_label.setText(f"Rendering: {folder}")
             QApplication.processEvents()
-            success, error_msg = self.run_ffmpeg(folder, output_dir, fps, hwaccel, preset)
+            success, error_msg = self.run_ffmpeg(folder, output_dir, fps, hwaccel, preset, audio_file)
             if success:
                 self.set_item_checkmark(item)
             else:
@@ -154,53 +187,11 @@ class FFmpegGUI(QWidget):
             check_label.setPixmap(pixmap)
             layout.insertWidget(0, check_label)
 
-    def _create_folder_widget(self, folder_name, item):
-        widget = QWidget()
-        layout = QHBoxLayout()
-        layout.setContentsMargins(2, 2, 2, 2)
-        # Placeholder for checkmark
-        check_label = QLabel()
-        check_label.setFixedSize(QSize(16, 16))
-        layout.addWidget(check_label)
-        remove_btn = QPushButton()
-        remove_btn.setFixedSize(QSize(20, 20))
-        remove_btn.setStyleSheet("QPushButton { border: none; background: transparent; }")
-        # Create a red X icon
-        pixmap = QPixmap(16, 16)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.setPen(QColor("red"))
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.drawLine(4, 4, 12, 12)
-        painter.drawLine(12, 4, 4, 12)
-        painter.end()
-        remove_btn.setIcon(QIcon(pixmap))
-        remove_btn.setIconSize(QSize(16, 16))
-        remove_btn.clicked.connect(lambda: self._remove_item(item))
-        label = QLabel(folder_name)
-        layout.addWidget(remove_btn)
-        layout.addWidget(label)
-        layout.addStretch()
-        widget.setLayout(layout)
-        return widget
-
-    def _remove_item(self, item):
-        row = self.input_list.row(item)
-        self.input_list.takeItem(row)
-
-    def browse_output(self):
-        options = QFileDialog.Option.DontUseNativeDialog
-        folder = QFileDialog.getExistingDirectory(self, "Select Output Folder", options=options)
-        if folder:
-            self.output_path.setText(folder)
-
-    def run_ffmpeg(self, input_dir, output_dir, fps, hwaccel, preset):
-        # Find first image file and extension
+    def run_ffmpeg(self, input_dir, output_dir, fps, hwaccel, preset, audio_file=None):
         files = sorted([f for f in os.listdir(input_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff'))])
         if not files:
-            return False
+            return False, "No image files found."
 
-        # Try to detect a sequence pattern like name0001.png
         pattern = None
         match = re.match(r"(.*?)(\d+)(\.[^.]+)$", files[0])
         if match:
@@ -208,24 +199,21 @@ class FFmpegGUI(QWidget):
             num_digits = len(digits)
             pattern = f"{prefix}%0{num_digits}d{ext}"
         else:
-            # fallback: just use the first file (will only process one frame)
             pattern = files[0]
 
         input_pattern = os.path.join(input_dir, pattern)
         base_name = os.path.basename(os.path.normpath(input_dir))
 
-        # Set output extension and ffmpeg options based on preset
         if preset == "ProRes 422":
             output_file = os.path.join(output_dir, f"{base_name}_prores422.mov")
             codec = "prores_ks"
-            ffmpeg_args = ["-profile:v", "3"]  # Profile 3 = ProRes 422
+            ffmpeg_args = ["-profile:v", "3"]
         elif preset == "ProRes 422 Proxy":
             output_file = os.path.join(output_dir, f"{base_name}_prores422proxy.mov")
             codec = "prores_ks"
-            ffmpeg_args = ["-profile:v", "0"]  # Profile 0 = Proxy
+            ffmpeg_args = ["-profile:v", "0"]
         elif preset == "H.264 25Mbps":
             output_file = os.path.join(output_dir, f"{base_name}_h264.mp4")
-            # Only use GPU for H.264
             use_nvenc = False
             if hwaccel == "NVIDIA (h264_nvenc)":
                 use_nvenc = True
@@ -239,7 +227,6 @@ class FFmpegGUI(QWidget):
             codec = "h264_nvenc" if use_nvenc else "libx264"
             ffmpeg_args = ["-b:v", "25M"]
         else:
-            # fallback
             output_file = os.path.join(output_dir, f"{base_name}.mp4")
             codec = "libx264"
             ffmpeg_args = []
@@ -248,6 +235,16 @@ class FFmpegGUI(QWidget):
             "ffmpeg",
             "-framerate", fps,
             "-i", input_pattern,
+        ]
+
+        # Add audio if provided
+        if audio_file:
+            cmd += ["-i", audio_file, "-map", "0:v:0", "-map", "1:a:0?"]
+        # If no audio, just map video
+        else:
+            cmd += []
+
+        cmd += [
             "-c:v", codec,
             *ffmpeg_args,
             "-pix_fmt", "yuv420p",
@@ -273,13 +270,126 @@ class FFmpegGUI(QWidget):
             if process.returncode == 0:
                 return True, ""
             else:
-                return False, "\n".join(output_lines[-20:])  # Show last 20 lines of output
+                return False, "\n".join(output_lines[-20:])
         except Exception as e:
             return False, str(e)
 
     def remove_selected_folders(self):
         for item in self.input_list.selectedItems():
             self.input_list.takeItem(self.input_list.row(item))
+
+    def browse_output(self):
+        options = QFileDialog.Option.DontUseNativeDialog
+        folder = QFileDialog.getExistingDirectory(self, "Select Output Folder", options=options)
+        if folder:
+            self.output_path.setText(folder)
+
+    def _remove_item(self, item):
+        row = self.input_list.row(item)
+        widget = self.input_list.itemWidget(item)
+        if widget:
+            widget.deleteLater()
+        self.input_list.takeItem(row)
+
+class FolderWidget(QWidget):
+    AUDIO_EXTS = ('.wav', '.mp3', '.aac', '.flac', '.m4a', '.ogg', '.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v')
+
+    def __init__(self, folder_name, item, parent):
+        super().__init__()
+        self.item = item
+        self.parent = parent  # Reference to FFmpegGUI
+        self.setAcceptDrops(True)
+        layout = QHBoxLayout()
+        layout.setContentsMargins(2, 2, 2, 2)
+        self.check_label = QLabel()
+        self.check_label.setFixedSize(QSize(16, 16))
+        layout.addWidget(self.check_label)
+        remove_btn = QPushButton()
+        remove_btn.setFixedSize(QSize(20, 20))
+        remove_btn.setStyleSheet("QPushButton { border: none; background: transparent; }")
+        pixmap = QPixmap(16, 16)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setPen(QColor("red"))
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.drawLine(4, 4, 12, 12)
+        painter.drawLine(12, 4, 4, 12)
+        painter.end()
+        remove_btn.setIcon(QIcon(pixmap))
+        remove_btn.setIconSize(QSize(16, 16))
+        remove_btn.clicked.connect(lambda: parent._remove_item(item))
+        label = QLabel(folder_name)
+        # label.setStyleSheet("color: black;")
+        layout.addWidget(remove_btn)
+        layout.addWidget(label)
+
+        # Separator for clarity
+        separator = QLabel(" | ")
+        separator.setStyleSheet("color: gray;")
+        layout.addWidget(separator)
+
+        self.audio_label = QLabel("No audio")
+        # self.audio_label.setStyleSheet("color: black;")
+        self.browse_audio_btn = QPushButton("Browse Audio")
+        self.browse_audio_btn.setFixedSize(QSize(90, 22))
+        self.browse_audio_btn.clicked.connect(lambda: parent._browse_audio(item, self.audio_label, self))
+        layout.addWidget(self.audio_label)
+        layout.addWidget(self.browse_audio_btn)
+        # Red X for removing audio, hidden by default
+        self.remove_audio_btn = QPushButton()
+        self.remove_audio_btn.setFixedSize(QSize(20, 20))
+        self.remove_audio_btn.setStyleSheet("QPushButton { border: none; background: transparent; }")
+        pixmap2 = QPixmap(16, 16)
+        pixmap2.fill(Qt.GlobalColor.transparent)
+        painter2 = QPainter(pixmap2)
+        painter2.setPen(QColor("red"))
+        painter2.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter2.drawLine(4, 4, 12, 12)
+        painter2.drawLine(12, 4, 4, 12)
+        painter2.end()
+        self.remove_audio_btn.setIcon(QIcon(pixmap2))
+        self.remove_audio_btn.setIconSize(QSize(16, 16))
+        self.remove_audio_btn.clicked.connect(self.remove_audio)
+        self.remove_audio_btn.hide()
+        layout.addWidget(self.remove_audio_btn)
+        layout.addStretch()
+        self.setLayout(layout)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.toLocalFile().lower().endswith(self.AUDIO_EXTS):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dropEvent(self, event):
+        for url in event.mimeData().urls():
+            file = url.toLocalFile()
+            if file.lower().endswith(self.AUDIO_EXTS):
+                self.set_audio_file(file)
+                break
+
+    def set_audio_file(self, file):
+        has_audio = self.parent._audio_file_has_audio(file)
+        self.item.setData(Qt.ItemDataRole.UserRole + 1, file if has_audio else None)
+        if has_audio:
+            self.audio_label.setText(os.path.basename(file))
+            # self.audio_label.setStyleSheet("color: black;")
+            self.browse_audio_btn.hide()
+            self.remove_audio_btn.show()
+        else:
+            self.audio_label.setText(os.path.basename(file))
+            self.audio_label.setStyleSheet("color: red;")
+            self.browse_audio_btn.hide()
+            self.remove_audio_btn.show()
+
+    def remove_audio(self):
+        self.item.setData(Qt.ItemDataRole.UserRole + 1, None)
+        self.audio_label.setText("No audio")
+        # self.audio_label.setStyleSheet("color: black;")
+        self.browse_audio_btn.show()
+        self.remove_audio_btn.hide()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
