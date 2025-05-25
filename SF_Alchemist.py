@@ -11,25 +11,33 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QColor, QPixmap, QPainter
 
+
 class FFmpegGUI(QWidget):
-    AUDIO_EXTS = ('.wav', '.mp3', '.aac', '.flac', '.m4a', '.ogg', '.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v')
+    AUDIO_EXTS = ('.wav', '.mp3', '.aac', '.flac', '.m4a', '.ogg',
+                  '.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v')
 
     def __init__(self):
         super().__init__()
+        self.resize(500, 600)  # or self.setFixedSize(900, 600)
         self.setWindowTitle("Image Sequence to Video (FFmpeg + NVIDIA)")
         self.layout = QVBoxLayout()
 
         # Folder/Audio list with headers
-        self.input_label = QLabel("Image Sequence Folders (drag & drop supported):")
+        self.input_label = QLabel(
+            "Image Sequence Folders (drag & drop supported):")
         self.layout.addWidget(self.input_label)
         self.input_tree = QTreeWidget()
         self.input_tree.setColumnCount(3)
         self.input_tree.setHeaderLabels(["", "Folder", "Audio"])
-        self.input_tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
+        self.input_tree.setSelectionMode(
+            QTreeWidget.SelectionMode.ExtendedSelection)
         self.input_tree.setAcceptDrops(True)
         self.input_tree.viewport().setAcceptDrops(True)
         self.input_tree.setDropIndicatorShown(True)
         self.input_tree.setDragDropMode(QTreeWidget.DragDropMode.NoDragDrop)
+        # Set column widths
+        self.input_tree.setColumnWidth(0, 32)   # Remove button column
+        self.input_tree.setColumnWidth(1, 150)  # Folder column
         self.layout.addWidget(self.input_tree)
 
         self.output_label = QLabel("Output Folder:")
@@ -48,16 +56,17 @@ class FFmpegGUI(QWidget):
         self.hwaccel_label = QLabel("Hardware Acceleration:")
         self.layout.addWidget(self.hwaccel_label)
         self.hwaccel_combo = QComboBox()
-        self.hwaccel_combo.addItems(["Auto-detect", "NVIDIA (h264_nvenc)", "CPU (libx264)"])
+        self.hwaccel_combo.addItems(
+            ["Auto-detect", "NVIDIA (h264_nvenc)", "CPU (libx264)"])
         self.layout.addWidget(self.hwaccel_combo)
 
         self.preset_label = QLabel("Encoding Preset:")
         self.layout.addWidget(self.preset_label)
         self.preset_combo = QComboBox()
         self.preset_combo.addItems([
-            "ProRes 422",
-            "ProRes 422 Proxy",
-            "H.264 25Mbps"
+            "Preview MP4 - H.264 25Mbps",
+            "ProRes MOV - 422 Proxy",
+            "ProRes MOV - 422 Standard"           
         ])
         self.layout.addWidget(self.preset_combo)
 
@@ -93,7 +102,8 @@ class FFmpegGUI(QWidget):
             file = url.toLocalFile()
             if os.path.isdir(file):
                 folder_name = os.path.basename(os.path.normpath(file))
-                existing_paths = [self.input_tree.topLevelItem(i).data(0, Qt.ItemDataRole.UserRole) for i in range(self.input_tree.topLevelItemCount())]
+                existing_paths = [self.input_tree.topLevelItem(i).data(
+                    0, Qt.ItemDataRole.UserRole) for i in range(self.input_tree.topLevelItemCount())]
                 if file not in existing_paths:
                     item = QTreeWidgetItem(["", folder_name, "No audio"])
                     item.setFlags(item.flags() | Qt.ItemFlag.ItemIsDropEnabled)
@@ -107,7 +117,8 @@ class FFmpegGUI(QWidget):
     def _set_remove_button(self, item):
         remove_btn = QPushButton()
         remove_btn.setFixedSize(QSize(20, 20))
-        remove_btn.setStyleSheet("QPushButton { border: none; background: transparent; }")
+        remove_btn.setStyleSheet(
+            "QPushButton { border: none; background: transparent; }")
         pixmap = QPixmap(16, 16)
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
@@ -134,12 +145,13 @@ class FFmpegGUI(QWidget):
         layout.setSpacing(4)
 
         label = QLabel(filename)
-        label.setStyleSheet("color: black;")
+        label.setStyleSheet("color: green;")
         layout.addWidget(label)
 
         btn = QPushButton()
         btn.setFixedSize(QSize(22, 22))
-        btn.setStyleSheet("QPushButton { border: none; background: transparent; }")
+        btn.setStyleSheet(
+            "QPushButton { border: none; background: transparent; }")
         pixmap = QPixmap(16, 16)
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
@@ -168,7 +180,8 @@ class FFmpegGUI(QWidget):
             "Audio/Video Files (*.wav *.mp3 *.aac *.flac *.m4a *.ogg *.mp4 *.mov *.mkv *.avi *.webm *.m4v)", options=options)
         if file:
             has_audio = self._audio_file_has_audio(file)
-            item.setData(2, Qt.ItemDataRole.UserRole, file if has_audio else None)
+            item.setData(2, Qt.ItemDataRole.UserRole,
+                         file if has_audio else None)
             filename = os.path.basename(file)
             if has_audio:
                 item.setText(2, filename)
@@ -191,14 +204,16 @@ class FFmpegGUI(QWidget):
 
     def browse_output(self):
         options = QFileDialog.Option.DontUseNativeDialog
-        folder = QFileDialog.getExistingDirectory(self, "Select Output Folder", options=options)
+        folder = QFileDialog.getExistingDirectory(
+            self, "Select Output Folder", options=options)
         if folder:
             self.output_path.setText(folder)
 
     def _audio_file_has_audio(self, file):
         try:
             result = subprocess.run(
-                ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_type", "-of", "csv=p=0", file],
+                ["ffprobe", "-v", "error", "-select_streams", "a",
+                    "-show_entries", "stream=codec_type", "-of", "csv=p=0", file],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
             return "audio" in result.stdout
@@ -215,7 +230,8 @@ class FFmpegGUI(QWidget):
             QMessageBox.critical(self, "Error", "Invalid output folder.")
             return
 
-        items = [self.input_tree.topLevelItem(i) for i in range(self.input_tree.topLevelItemCount())]
+        items = [self.input_tree.topLevelItem(i) for i in range(
+            self.input_tree.topLevelItemCount())]
         if not items:
             QMessageBox.critical(self, "Error", "No input folders selected.")
             return
@@ -225,12 +241,14 @@ class FFmpegGUI(QWidget):
             audio_file = item.data(2, Qt.ItemDataRole.UserRole)
             self.status_label.setText(f"Rendering: {folder}")
             QApplication.processEvents()
-            success, error_msg = self.run_ffmpeg(folder, output_dir, fps, hwaccel, preset, audio_file)
+            success, error_msg = self.run_ffmpeg(
+                folder, output_dir, fps, hwaccel, preset, audio_file)
             if success:
                 self.set_item_checkmark(item)
             else:
                 folder_name = os.path.basename(folder)
-                QMessageBox.critical(self, "Error", f"Failed rendering: {folder_name}\n\nError:\n{error_msg}")
+                QMessageBox.critical(
+                    self, "Error", f"Failed rendering: {folder_name}\n\nError:\n{error_msg}")
                 self.status_label.setText(f"Error rendering: {folder_name}")
                 return  # Abort further operations
         self.status_label.setText("All renders finished.")
@@ -257,7 +275,8 @@ class FFmpegGUI(QWidget):
             self.ffmpeg_output.setVisible(False)
 
     def run_ffmpeg(self, input_dir, output_dir, fps, hwaccel, preset, audio_file=None):
-        files = sorted([f for f in os.listdir(input_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff'))])
+        files = sorted([f for f in os.listdir(input_dir) if f.lower().endswith(
+            ('.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff'))])
         if not files:
             return False, "No image files found."
 
@@ -273,22 +292,25 @@ class FFmpegGUI(QWidget):
         input_pattern = os.path.join(input_dir, pattern)
         base_name = os.path.basename(os.path.normpath(input_dir))
 
-        if preset == "ProRes 422":
-            output_file = os.path.join(output_dir, f"{base_name}_prores422.mov")
+        if preset == "ProRes MOV - 422 Standard":
+            output_file = os.path.join(
+                output_dir, f"{base_name}_prores422.mov")
             codec = "prores_ks"
             ffmpeg_args = ["-profile:v", "3"]
-        elif preset == "ProRes 422 Proxy":
-            output_file = os.path.join(output_dir, f"{base_name}_prores422proxy.mov")
+        elif preset == "ProRes MOV - 422 Proxy":
+            output_file = os.path.join(
+                output_dir, f"{base_name}_prores422proxy.mov")
             codec = "prores_ks"
             ffmpeg_args = ["-profile:v", "0"]
-        elif preset == "H.264 25Mbps":
+        elif preset == "Preview MP4 - H.264 25Mbps":
             output_file = os.path.join(output_dir, f"{base_name}_h264.mp4")
             use_nvenc = False
             if hwaccel == "NVIDIA (h264_nvenc)":
                 use_nvenc = True
             elif hwaccel == "Auto-detect":
                 try:
-                    result = subprocess.run(['ffmpeg', '-hide_banner', '-encoders'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    result = subprocess.run(['ffmpeg', '-hide_banner', '-encoders'],
+                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                     if "h264_nvenc" in result.stdout:
                         use_nvenc = True
                 except Exception:
@@ -339,6 +361,7 @@ class FFmpegGUI(QWidget):
                 return False, "\n".join(output_lines[-20:])
         except Exception as e:
             return False, str(e)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
