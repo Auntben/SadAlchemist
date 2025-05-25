@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QTextEdit
 )
 from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QIcon, QColor, QPixmap, QPainter
+from PyQt6.QtGui import QIcon, QColor, QPixmap, QPainter, QFont
 
 
 class FFmpegGUI(QWidget):
@@ -18,26 +18,61 @@ class FFmpegGUI(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.resize(500, 600)  # or self.setFixedSize(900, 600)
-        self.setWindowTitle("Image Sequence to Video (FFmpeg + NVIDIA)")
+        self.resize(800, 800)
+        self.setWindowTitle("Sadfish Alchemist 2025.1")
         self.layout = QVBoxLayout()
+
+        # --- Add large title at the very top ---
+        self.title_label = QLabel("SadFish Alchemist v25.0")
+        font = QFont()
+        font.setPointSize(20)
+        font.setBold(True)
+        self.title_label.setFont(font)
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self.layout.addWidget(self.title_label)
+        # --- End title addition ---
+
+        # --- Add subtitle under the title ---
+        self.subtitle_label = QLabel("Image Sequence to Video Conversion")
+        subtitle_font = QFont()
+        subtitle_font.setPointSize(12)
+        subtitle_font.setItalic(True)
+        self.subtitle_label.setFont(subtitle_font)
+        self.subtitle_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self.layout.addWidget(self.subtitle_label)
+        # --- End subtitle addition ---
+
+        # Add vertical space
+        self.layout.addWidget(QLabel(""))  # Blank label for space
+        # Or, for more control:
+        # spacer = QLabel()
+        # spacer.setFixedHeight(12)
+        # self.layout.addWidget(spacer)
+
+        # 1. Task Code at the top
+        self.task_label = QLabel("Task Code (e.g. COMP, ACO, FX, etc.):")
+        self.layout.addWidget(self.task_label)
+        self.task_input = QLineEdit()
+        self.layout.addWidget(self.task_input)
 
         # Folder/Audio list with headers
         self.input_label = QLabel(
             "Image Sequence Folders (drag & drop supported):")
         self.layout.addWidget(self.input_label)
         self.input_tree = QTreeWidget()
-        self.input_tree.setColumnCount(3)
-        self.input_tree.setHeaderLabels(["", "Folder", "Audio"])
-        self.input_tree.setSelectionMode(
-            QTreeWidget.SelectionMode.ExtendedSelection)
+        self.input_tree.setColumnCount(5)
+        self.input_tree.setHeaderLabels(["", "IMG SQ Folder", "Take #", "Audio Source (optional)", "Filename Preview"])
+        self.input_tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
         self.input_tree.setAcceptDrops(True)
         self.input_tree.viewport().setAcceptDrops(True)
         self.input_tree.setDropIndicatorShown(True)
         self.input_tree.setDragDropMode(QTreeWidget.DragDropMode.NoDragDrop)
         # Set column widths
         self.input_tree.setColumnWidth(0, 32)   # Remove button column
-        self.input_tree.setColumnWidth(1, 150)  # Folder column
+        self.input_tree.setColumnWidth(1, 200)  # Folder column
+        self.input_tree.setColumnWidth(2, 60)
+        self.input_tree.setColumnWidth(3, 150)   # Take number column
+        self.input_tree.setColumnWidth(4, 250)  # Preview filename column
         self.layout.addWidget(self.input_tree)
 
         self.output_label = QLabel("Output Folder:")
@@ -69,6 +104,10 @@ class FFmpegGUI(QWidget):
             "ProRes MOV - 422 Standard"           
         ])
         self.layout.addWidget(self.preset_combo)
+
+        # Place these lines here, after both widgets are created:
+        self.task_input.textChanged.connect(self.update_all_previews)
+        self.preset_combo.currentIndexChanged.connect(self.update_all_previews)
 
         self.run_btn = QPushButton("Convert All")
         self.run_btn.clicked.connect(self.run_ffmpeg_batch)
@@ -105,13 +144,14 @@ class FFmpegGUI(QWidget):
                 existing_paths = [self.input_tree.topLevelItem(i).data(
                     0, Qt.ItemDataRole.UserRole) for i in range(self.input_tree.topLevelItemCount())]
                 if file not in existing_paths:
-                    item = QTreeWidgetItem(["", folder_name, "No audio"])
-                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsDropEnabled)
+                    item = QTreeWidgetItem(["", folder_name, "tk01", "No audio", ""])
+                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsDropEnabled | Qt.ItemFlag.ItemIsEditable)
                     item.setData(1, Qt.ItemDataRole.UserRole, file)
                     item.setData(2, Qt.ItemDataRole.UserRole, None)
                     self.input_tree.addTopLevelItem(item)
                     self._set_remove_button(item)
                     self._set_audio_button(item)
+                    self._update_preview_filename(item)
         event.accept()
 
     def _set_remove_button(self, item):
@@ -190,6 +230,30 @@ class FFmpegGUI(QWidget):
                 item.setText(2, filename)
                 item.setForeground(2, QColor("red"))
             self._set_remove_audio_button(item, filename)
+            self._update_preview_filename(item)
+
+    def _update_preview_filename(self, item):
+        # Get current values
+        folder_name = item.text(1)
+        take_number = item.text(2)
+        task_code = self.task_input.text().strip() or "TASK"
+        # Guess extension based on preset (optional: you can improve this)
+        preset = self.preset_combo.currentText() if hasattr(self, 'preset_combo') else ""
+        if "mov" in preset.lower():
+            ext = "mov"
+        else:
+            ext = "mp4"
+        preview = f"{folder_name}_{take_number}_{task_code}.{ext}"
+        item.setText(4, preview)
+
+    # Optionally, update preview for all rows when task code or preset changes:
+    def update_all_previews(self):
+        for i in range(self.input_tree.topLevelItemCount()):
+            self._update_preview_filename(self.input_tree.topLevelItem(i))
+
+    # Call this after task code or preset changes:
+    # self.task_input.textChanged.connect(self.update_all_previews)
+    # self.preset_combo.currentIndexChanged.connect(self.update_all_previews)
 
     def _remove_audio(self, item):
         item.setData(2, Qt.ItemDataRole.UserRole, None)
@@ -197,10 +261,20 @@ class FFmpegGUI(QWidget):
         item.setForeground(2, QColor())
         self._set_audio_button(item)
 
-    def _remove_item(self, item):
-        idx = self.input_tree.indexOfTopLevelItem(item)
-        if idx != -1:
-            self.input_tree.takeTopLevelItem(idx)
+    def _on_item_changed(self, item, column):
+        # Ensure take number is always formatted as tkXX
+        if column == 2:
+            text = item.text(2)
+            match = re.match(r'tk?(\d{1,2})', text, re.IGNORECASE)
+            if match:
+                num = int(match.group(1))
+                formatted = f"tk{num:02d}"
+                item.setText(2, formatted)
+                item.setData(2, Qt.ItemDataRole.UserRole, formatted)
+            else:
+                item.setText(2, "tk01")
+                item.setData(2, Qt.ItemDataRole.UserRole, "tk01")
+        self._update_preview_filename(item)
 
     def browse_output(self):
         options = QFileDialog.Option.DontUseNativeDialog
