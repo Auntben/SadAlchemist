@@ -4,27 +4,33 @@ import subprocess
 import re
 
 from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QPushButton, QFileDialog,
-    QLabel, QLineEdit, QMessageBox, QComboBox, QListWidget, QListWidgetItem,
-    QHBoxLayout, QTextEdit
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog,
+    QLabel, QLineEdit, QMessageBox, QComboBox, QTreeWidget, QTreeWidgetItem,
+    QTextEdit
 )
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QColor, QPixmap, QPainter
 
 class FFmpegGUI(QWidget):
+    AUDIO_EXTS = ('.wav', '.mp3', '.aac', '.flac', '.m4a', '.ogg', '.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v')
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Image Sequence to Video (FFmpeg + NVIDIA)")
         self.layout = QVBoxLayout()
 
+        # Folder/Audio list with headers
         self.input_label = QLabel("Image Sequence Folders (drag & drop supported):")
         self.layout.addWidget(self.input_label)
-        self.input_list = QListWidget()
-        self.input_list.setAcceptDrops(True)
-        self.input_list.setDragDropMode(QListWidget.DragDropMode.DropOnly)
-        self.input_list.viewport().setAcceptDrops(True)
-        self.input_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-        self.layout.addWidget(self.input_list)
+        self.input_tree = QTreeWidget()
+        self.input_tree.setColumnCount(3)
+        self.input_tree.setHeaderLabels(["", "Folder", "Audio"])
+        self.input_tree.setSelectionMode(QTreeWidget.SelectionMode.ExtendedSelection)
+        self.input_tree.setAcceptDrops(True)
+        self.input_tree.viewport().setAcceptDrops(True)
+        self.input_tree.setDropIndicatorShown(True)
+        self.input_tree.setDragDropMode(QTreeWidget.DragDropMode.NoDragDrop)
+        self.layout.addWidget(self.input_tree)
 
         self.output_label = QLabel("Output Folder:")
         self.layout.addWidget(self.output_label)
@@ -45,7 +51,6 @@ class FFmpegGUI(QWidget):
         self.hwaccel_combo.addItems(["Auto-detect", "NVIDIA (h264_nvenc)", "CPU (libx264)"])
         self.layout.addWidget(self.hwaccel_combo)
 
-        # Add encoding preset selection
         self.preset_label = QLabel("Encoding Preset:")
         self.layout.addWidget(self.preset_label)
         self.preset_combo = QComboBox()
@@ -63,7 +68,6 @@ class FFmpegGUI(QWidget):
         self.status_label = QLabel("")
         self.layout.addWidget(self.status_label)
 
-        # Add toggle button and ffmpeg output box
         self.toggle_output_btn = QPushButton("Show FFmpeg Output")
         self.toggle_output_btn.setCheckable(True)
         self.toggle_output_btn.toggled.connect(self.toggle_ffmpeg_output)
@@ -77,51 +81,119 @@ class FFmpegGUI(QWidget):
         self.setLayout(self.layout)
         self.setAcceptDrops(True)
 
-    def toggle_ffmpeg_output(self, checked):
-        if checked:
-            self.toggle_output_btn.setText("Hide FFmpeg Output")
-            self.ffmpeg_output.setVisible(True)
-        else:
-            self.toggle_output_btn.setText("Show FFmpeg Output")
-            self.ffmpeg_output.setVisible(False)
-
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
 
+    def dragMoveEvent(self, event):
+        event.acceptProposedAction()
+
     def dropEvent(self, event):
         for url in event.mimeData().urls():
-            path = url.toLocalFile()
-            folder_name = os.path.basename(os.path.normpath(path))
-            existing_paths = [self.input_list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.input_list.count())]
-            if os.path.isdir(path) and path not in existing_paths:
-                item = QListWidgetItem()
-                item.setData(Qt.ItemDataRole.UserRole, path)
-                item.setData(Qt.ItemDataRole.UserRole + 1, None)  # Audio path
-                widget = self._create_folder_widget(folder_name, item)
-                self.input_list.addItem(item)
-                self.input_list.setItemWidget(item, widget)
+            file = url.toLocalFile()
+            if os.path.isdir(file):
+                folder_name = os.path.basename(os.path.normpath(file))
+                existing_paths = [self.input_tree.topLevelItem(i).data(0, Qt.ItemDataRole.UserRole) for i in range(self.input_tree.topLevelItemCount())]
+                if file not in existing_paths:
+                    item = QTreeWidgetItem(["", folder_name, "No audio"])
+                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsDropEnabled)
+                    item.setData(1, Qt.ItemDataRole.UserRole, file)
+                    item.setData(2, Qt.ItemDataRole.UserRole, None)
+                    self.input_tree.addTopLevelItem(item)
+                    self._set_remove_button(item)
+                    self._set_audio_button(item)
+        event.accept()
 
-    def _create_folder_widget(self, folder_name, item):
-        return FolderWidget(folder_name, item, self)
+    def _set_remove_button(self, item):
+        remove_btn = QPushButton()
+        remove_btn.setFixedSize(QSize(20, 20))
+        remove_btn.setStyleSheet("QPushButton { border: none; background: transparent; }")
+        pixmap = QPixmap(16, 16)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setPen(QColor("red"))
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.drawLine(4, 4, 12, 12)
+        painter.drawLine(12, 4, 4, 12)
+        painter.end()
+        remove_btn.setIcon(QIcon(pixmap))
+        remove_btn.setIconSize(QSize(16, 16))
+        remove_btn.clicked.connect(lambda: self._remove_item(item))
+        self.input_tree.setItemWidget(item, 0, remove_btn)
 
-    def _browse_audio(self, item, audio_label, folder_widget=None):
+    def _set_audio_button(self, item):
+        btn = QPushButton("Add Audio")
+        btn.setFixedSize(QSize(90, 22))
+        btn.clicked.connect(lambda: self._browse_audio(item))
+        self.input_tree.setItemWidget(item, 2, btn)
+
+    def _set_remove_audio_button(self, item, filename):
+        widget = QWidget()
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        label = QLabel(filename)
+        label.setStyleSheet("color: black;")
+        layout.addWidget(label)
+
+        btn = QPushButton()
+        btn.setFixedSize(QSize(22, 22))
+        btn.setStyleSheet("QPushButton { border: none; background: transparent; }")
+        pixmap = QPixmap(16, 16)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setPen(QColor("red"))
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.drawLine(4, 4, 12, 12)
+        painter.drawLine(12, 4, 4, 12)
+        painter.end()
+        btn.setIcon(QIcon(pixmap))
+        btn.setIconSize(QSize(16, 16))
+        btn.clicked.connect(lambda: self._remove_audio(item))
+        layout.addWidget(btn)
+
+        widget.setLayout(layout)
+        self.input_tree.setItemWidget(item, 2, widget)
+
+    def _browse_audio(self, item):
+        image_folder = item.data(1, Qt.ItemDataRole.UserRole)
+        if image_folder:
+            start_dir = os.path.dirname(image_folder)
+        else:
+            start_dir = ""
         options = QFileDialog.Option.DontUseNativeDialog
         file, _ = QFileDialog.getOpenFileName(
-            self, "Select Audio/Video File", "",
+            self, "Select Audio/Video File", start_dir,
             "Audio/Video Files (*.wav *.mp3 *.aac *.flac *.m4a *.ogg *.mp4 *.mov *.mkv *.avi *.webm *.m4v)", options=options)
         if file:
             has_audio = self._audio_file_has_audio(file)
-            item.setData(Qt.ItemDataRole.UserRole + 1, file if has_audio else None)
-            if folder_widget:
-                folder_widget.set_audio_file(file)
+            item.setData(2, Qt.ItemDataRole.UserRole, file if has_audio else None)
+            filename = os.path.basename(file)
+            if has_audio:
+                item.setText(2, filename)
+                item.setForeground(2, QColor())
             else:
-                if has_audio:
-                    audio_label.setText(os.path.basename(file))
-                    # audio_label.setStyleSheet("color: black;")
-                else:
-                    audio_label.setText(os.path.basename(file))
-                    audio_label.setStyleSheet("color: red;")
+                item.setText(2, filename)
+                item.setForeground(2, QColor("red"))
+            self._set_remove_audio_button(item, filename)
+
+    def _remove_audio(self, item):
+        item.setData(2, Qt.ItemDataRole.UserRole, None)
+        item.setText(2, "No audio")
+        item.setForeground(2, QColor())
+        self._set_audio_button(item)
+
+    def _remove_item(self, item):
+        idx = self.input_tree.indexOfTopLevelItem(item)
+        if idx != -1:
+            self.input_tree.takeTopLevelItem(idx)
+
+    def browse_output(self):
+        options = QFileDialog.Option.DontUseNativeDialog
+        folder = QFileDialog.getExistingDirectory(self, "Select Output Folder", options=options)
+        if folder:
+            self.output_path.setText(folder)
 
     def _audio_file_has_audio(self, file):
         try:
@@ -143,14 +215,14 @@ class FFmpegGUI(QWidget):
             QMessageBox.critical(self, "Error", "Invalid output folder.")
             return
 
-        folders = [self.input_list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.input_list.count())]
-        audio_files = [self.input_list.item(i).data(Qt.ItemDataRole.UserRole + 1) for i in range(self.input_list.count())]
-        items = [self.input_list.item(i) for i in range(self.input_list.count())]
-        if not folders:
+        items = [self.input_tree.topLevelItem(i) for i in range(self.input_tree.topLevelItemCount())]
+        if not items:
             QMessageBox.critical(self, "Error", "No input folders selected.")
             return
 
-        for folder, audio_file, item in zip(folders, audio_files, items):
+        for item in items:
+            folder = item.data(1, Qt.ItemDataRole.UserRole)
+            audio_file = item.data(2, Qt.ItemDataRole.UserRole)
             self.status_label.setText(f"Rendering: {folder}")
             QApplication.processEvents()
             success, error_msg = self.run_ffmpeg(folder, output_dir, fps, hwaccel, preset, audio_file)
@@ -164,28 +236,25 @@ class FFmpegGUI(QWidget):
         self.status_label.setText("All renders finished.")
 
     def set_item_checkmark(self, item):
-        # Get the widget for this item and add a green checkmark to the left of the red X
-        widget = self.input_list.itemWidget(item)
-        if widget:
-            layout = widget.layout()
-            # Remove existing checkmark if present
-            if layout.count() > 2 and isinstance(layout.itemAt(0).widget(), QLabel):
-                layout.itemAt(0).widget().deleteLater()
-                layout.removeItem(layout.itemAt(0))
-            # Add green checkmark QLabel
-            check_label = QLabel()
-            pixmap = QPixmap(16, 16)
-            pixmap.fill(Qt.GlobalColor.transparent)
-            painter = QPainter(pixmap)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            painter.setPen(QColor("green"))
-            painter.setBrush(QColor("green"))
-            # Draw checkmark
-            painter.drawLine(4, 10, 8, 14)
-            painter.drawLine(8, 14, 13, 5)
-            painter.end()
-            check_label.setPixmap(pixmap)
-            layout.insertWidget(0, check_label)
+        # Add a green checkmark icon to the folder column
+        pixmap = QPixmap(16, 16)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QColor("green"))
+        painter.setBrush(QColor("green"))
+        painter.drawLine(4, 10, 8, 14)
+        painter.drawLine(8, 14, 13, 5)
+        painter.end()
+        item.setIcon(1, QIcon(pixmap))
+
+    def toggle_ffmpeg_output(self, checked):
+        if checked:
+            self.toggle_output_btn.setText("Hide FFmpeg Output")
+            self.ffmpeg_output.setVisible(True)
+        else:
+            self.toggle_output_btn.setText("Show FFmpeg Output")
+            self.ffmpeg_output.setVisible(False)
 
     def run_ffmpeg(self, input_dir, output_dir, fps, hwaccel, preset, audio_file=None):
         files = sorted([f for f in os.listdir(input_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff'))])
@@ -241,9 +310,6 @@ class FFmpegGUI(QWidget):
         if audio_file:
             cmd += ["-i", audio_file, "-map", "0:v:0", "-map", "1:a:0?"]
         # If no audio, just map video
-        else:
-            cmd += []
-
         cmd += [
             "-c:v", codec,
             *ffmpeg_args,
@@ -273,123 +339,6 @@ class FFmpegGUI(QWidget):
                 return False, "\n".join(output_lines[-20:])
         except Exception as e:
             return False, str(e)
-
-    def remove_selected_folders(self):
-        for item in self.input_list.selectedItems():
-            self.input_list.takeItem(self.input_list.row(item))
-
-    def browse_output(self):
-        options = QFileDialog.Option.DontUseNativeDialog
-        folder = QFileDialog.getExistingDirectory(self, "Select Output Folder", options=options)
-        if folder:
-            self.output_path.setText(folder)
-
-    def _remove_item(self, item):
-        row = self.input_list.row(item)
-        widget = self.input_list.itemWidget(item)
-        if widget:
-            widget.deleteLater()
-        self.input_list.takeItem(row)
-
-class FolderWidget(QWidget):
-    AUDIO_EXTS = ('.wav', '.mp3', '.aac', '.flac', '.m4a', '.ogg', '.mp4', '.mov', '.mkv', '.avi', '.webm', '.m4v')
-
-    def __init__(self, folder_name, item, parent):
-        super().__init__()
-        self.item = item
-        self.parent = parent  # Reference to FFmpegGUI
-        self.setAcceptDrops(True)
-        layout = QHBoxLayout()
-        layout.setContentsMargins(2, 2, 2, 2)
-        self.check_label = QLabel()
-        self.check_label.setFixedSize(QSize(16, 16))
-        layout.addWidget(self.check_label)
-        remove_btn = QPushButton()
-        remove_btn.setFixedSize(QSize(20, 20))
-        remove_btn.setStyleSheet("QPushButton { border: none; background: transparent; }")
-        pixmap = QPixmap(16, 16)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.setPen(QColor("red"))
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.drawLine(4, 4, 12, 12)
-        painter.drawLine(12, 4, 4, 12)
-        painter.end()
-        remove_btn.setIcon(QIcon(pixmap))
-        remove_btn.setIconSize(QSize(16, 16))
-        remove_btn.clicked.connect(lambda: parent._remove_item(item))
-        label = QLabel(folder_name)
-        # label.setStyleSheet("color: black;")
-        layout.addWidget(remove_btn)
-        layout.addWidget(label)
-
-        # Separator for clarity
-        separator = QLabel(" | ")
-        separator.setStyleSheet("color: gray;")
-        layout.addWidget(separator)
-
-        self.audio_label = QLabel("No audio")
-        # self.audio_label.setStyleSheet("color: black;")
-        self.browse_audio_btn = QPushButton("Browse Audio")
-        self.browse_audio_btn.setFixedSize(QSize(90, 22))
-        self.browse_audio_btn.clicked.connect(lambda: parent._browse_audio(item, self.audio_label, self))
-        layout.addWidget(self.audio_label)
-        layout.addWidget(self.browse_audio_btn)
-        # Red X for removing audio, hidden by default
-        self.remove_audio_btn = QPushButton()
-        self.remove_audio_btn.setFixedSize(QSize(20, 20))
-        self.remove_audio_btn.setStyleSheet("QPushButton { border: none; background: transparent; }")
-        pixmap2 = QPixmap(16, 16)
-        pixmap2.fill(Qt.GlobalColor.transparent)
-        painter2 = QPainter(pixmap2)
-        painter2.setPen(QColor("red"))
-        painter2.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter2.drawLine(4, 4, 12, 12)
-        painter2.drawLine(12, 4, 4, 12)
-        painter2.end()
-        self.remove_audio_btn.setIcon(QIcon(pixmap2))
-        self.remove_audio_btn.setIconSize(QSize(16, 16))
-        self.remove_audio_btn.clicked.connect(self.remove_audio)
-        self.remove_audio_btn.hide()
-        layout.addWidget(self.remove_audio_btn)
-        layout.addStretch()
-        self.setLayout(layout)
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls():
-            for url in event.mimeData().urls():
-                if url.toLocalFile().lower().endswith(self.AUDIO_EXTS):
-                    event.acceptProposedAction()
-                    return
-        event.ignore()
-
-    def dropEvent(self, event):
-        for url in event.mimeData().urls():
-            file = url.toLocalFile()
-            if file.lower().endswith(self.AUDIO_EXTS):
-                self.set_audio_file(file)
-                break
-
-    def set_audio_file(self, file):
-        has_audio = self.parent._audio_file_has_audio(file)
-        self.item.setData(Qt.ItemDataRole.UserRole + 1, file if has_audio else None)
-        if has_audio:
-            self.audio_label.setText(os.path.basename(file))
-            # self.audio_label.setStyleSheet("color: black;")
-            self.browse_audio_btn.hide()
-            self.remove_audio_btn.show()
-        else:
-            self.audio_label.setText(os.path.basename(file))
-            self.audio_label.setStyleSheet("color: red;")
-            self.browse_audio_btn.hide()
-            self.remove_audio_btn.show()
-
-    def remove_audio(self):
-        self.item.setData(Qt.ItemDataRole.UserRole + 1, None)
-        self.audio_label.setText("No audio")
-        # self.audio_label.setStyleSheet("color: black;")
-        self.browse_audio_btn.show()
-        self.remove_audio_btn.hide()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
