@@ -5,9 +5,11 @@ import re
 
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton, QFileDialog,
-    QLabel, QLineEdit, QMessageBox, QComboBox, QListWidget
+    QLabel, QLineEdit, QMessageBox, QComboBox, QListWidget, QListWidgetItem,
+    QHBoxLayout, QTextEdit
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtGui import QIcon, QColor, QPixmap, QPainter
 
 class FFmpegGUI(QWidget):
     def __init__(self):
@@ -61,8 +63,27 @@ class FFmpegGUI(QWidget):
         self.status_label = QLabel("")
         self.layout.addWidget(self.status_label)
 
+        # Add toggle button and ffmpeg output box
+        self.toggle_output_btn = QPushButton("Show FFmpeg Output")
+        self.toggle_output_btn.setCheckable(True)
+        self.toggle_output_btn.toggled.connect(self.toggle_ffmpeg_output)
+        self.layout.addWidget(self.toggle_output_btn)
+
+        self.ffmpeg_output = QTextEdit()
+        self.ffmpeg_output.setReadOnly(True)
+        self.ffmpeg_output.setVisible(False)
+        self.layout.addWidget(self.ffmpeg_output)
+
         self.setLayout(self.layout)
         self.setAcceptDrops(True)
+
+    def toggle_ffmpeg_output(self, checked):
+        if checked:
+            self.toggle_output_btn.setText("Hide FFmpeg Output")
+            self.ffmpeg_output.setVisible(True)
+        else:
+            self.toggle_output_btn.setText("Show FFmpeg Output")
+            self.ffmpeg_output.setVisible(False)
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -71,14 +92,14 @@ class FFmpegGUI(QWidget):
     def dropEvent(self, event):
         for url in event.mimeData().urls():
             path = url.toLocalFile()
-            if os.path.isdir(path) and path not in [self.input_list.item(i).text() for i in range(self.input_list.count())]:
-                self.input_list.addItem(path)
-
-    def browse_output(self):
-        options = QFileDialog.Option.DontUseNativeDialog
-        folder = QFileDialog.getExistingDirectory(self, "Select Output Folder", options=options)
-        if folder:
-            self.output_path.setText(folder)
+            folder_name = os.path.basename(os.path.normpath(path))
+            existing_paths = [self.input_list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.input_list.count())]
+            if os.path.isdir(path) and path not in existing_paths:
+                item = QListWidgetItem()
+                item.setData(Qt.ItemDataRole.UserRole, path)
+                widget = self._create_folder_widget(folder_name, item)
+                self.input_list.addItem(item)
+                self.input_list.setItemWidget(item, widget)
 
     def run_ffmpeg_batch(self):
         output_dir = self.output_path.text()
@@ -90,20 +111,88 @@ class FFmpegGUI(QWidget):
             QMessageBox.critical(self, "Error", "Invalid output folder.")
             return
 
-        folders = [self.input_list.item(i).text() for i in range(self.input_list.count())]
+        folders = [self.input_list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.input_list.count())]
+        items = [self.input_list.item(i) for i in range(self.input_list.count())]
         if not folders:
             QMessageBox.critical(self, "Error", "No input folders selected.")
             return
 
-        for folder in folders:
+        for folder, item in zip(folders, items):
             self.status_label.setText(f"Rendering: {folder}")
             QApplication.processEvents()
-            success = self.run_ffmpeg(folder, output_dir, fps, hwaccel, preset)
+            success, error_msg = self.run_ffmpeg(folder, output_dir, fps, hwaccel, preset)
             if success:
-                QMessageBox.information(self, "Done", f"Finished rendering: {os.path.basename(folder)}")
+                self.set_item_checkmark(item)
             else:
-                QMessageBox.critical(self, "Error", f"Failed rendering: {os.path.basename(folder)}")
+                folder_name = os.path.basename(folder)
+                QMessageBox.critical(self, "Error", f"Failed rendering: {folder_name}\n\nError:\n{error_msg}")
+                self.status_label.setText(f"Error rendering: {folder_name}")
+                return  # Abort further operations
         self.status_label.setText("All renders finished.")
+
+    def set_item_checkmark(self, item):
+        # Get the widget for this item and add a green checkmark to the left of the red X
+        widget = self.input_list.itemWidget(item)
+        if widget:
+            layout = widget.layout()
+            # Remove existing checkmark if present
+            if layout.count() > 2 and isinstance(layout.itemAt(0).widget(), QLabel):
+                layout.itemAt(0).widget().deleteLater()
+                layout.removeItem(layout.itemAt(0))
+            # Add green checkmark QLabel
+            check_label = QLabel()
+            pixmap = QPixmap(16, 16)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(QColor("green"))
+            painter.setBrush(QColor("green"))
+            # Draw checkmark
+            painter.drawLine(4, 10, 8, 14)
+            painter.drawLine(8, 14, 13, 5)
+            painter.end()
+            check_label.setPixmap(pixmap)
+            layout.insertWidget(0, check_label)
+
+    def _create_folder_widget(self, folder_name, item):
+        widget = QWidget()
+        layout = QHBoxLayout()
+        layout.setContentsMargins(2, 2, 2, 2)
+        # Placeholder for checkmark
+        check_label = QLabel()
+        check_label.setFixedSize(QSize(16, 16))
+        layout.addWidget(check_label)
+        remove_btn = QPushButton()
+        remove_btn.setFixedSize(QSize(20, 20))
+        remove_btn.setStyleSheet("QPushButton { border: none; background: transparent; }")
+        # Create a red X icon
+        pixmap = QPixmap(16, 16)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setPen(QColor("red"))
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.drawLine(4, 4, 12, 12)
+        painter.drawLine(12, 4, 4, 12)
+        painter.end()
+        remove_btn.setIcon(QIcon(pixmap))
+        remove_btn.setIconSize(QSize(16, 16))
+        remove_btn.clicked.connect(lambda: self._remove_item(item))
+        label = QLabel(folder_name)
+        layout.addWidget(remove_btn)
+        layout.addWidget(label)
+        layout.addStretch()
+        widget.setLayout(layout)
+        return widget
+
+    def _remove_item(self, item):
+        row = self.input_list.row(item)
+        self.input_list.takeItem(row)
+
+    def browse_output(self):
+        options = QFileDialog.Option.DontUseNativeDialog
+        folder = QFileDialog.getExistingDirectory(self, "Select Output Folder", options=options)
+        if folder:
+            self.output_path.setText(folder)
 
     def run_ffmpeg(self, input_dir, output_dir, fps, hwaccel, preset):
         # Find first image file and extension
@@ -166,11 +255,31 @@ class FFmpegGUI(QWidget):
             output_file
         ]
 
+        self.ffmpeg_output.clear()
         try:
-            subprocess.run(cmd, check=True)
-            return True
-        except subprocess.CalledProcessError:
-            return False
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+            output_lines = []
+            for line in process.stdout:
+                self.ffmpeg_output.append(line.rstrip())
+                output_lines.append(line.rstrip())
+                QApplication.processEvents()
+            process.wait()
+            if process.returncode == 0:
+                return True, ""
+            else:
+                return False, "\n".join(output_lines[-20:])  # Show last 20 lines of output
+        except Exception as e:
+            return False, str(e)
+
+    def remove_selected_folders(self):
+        for item in self.input_list.selectedItems():
+            self.input_list.takeItem(self.input_list.row(item))
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
