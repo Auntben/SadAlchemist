@@ -6,7 +6,7 @@ import re
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog,
     QLabel, QLineEdit, QMessageBox, QComboBox, QTreeWidget, QTreeWidgetItem,
-    QTextEdit
+    QTextEdit, QInputDialog
 )
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QColor, QPixmap, QPainter, QFont
@@ -56,8 +56,7 @@ class FFmpegGUI(QWidget):
         self.layout.addWidget(self.task_input)
 
         # Folder/Audio list with headers
-        self.input_label = QLabel(
-            "Image Sequence Folders (drag & drop supported):")
+        self.input_label = QLabel("Image Sequence Folders (drag & drop supported):")
         self.layout.addWidget(self.input_label)
         self.input_tree = QTreeWidget()
         self.input_tree.setColumnCount(5)
@@ -74,6 +73,15 @@ class FFmpegGUI(QWidget):
         self.input_tree.setColumnWidth(3, 150)   # Take number column
         self.input_tree.setColumnWidth(4, 250)  # Preview filename column
         self.layout.addWidget(self.input_tree)
+
+        # Make take number column editable
+        self.input_tree.itemChanged.connect(self._on_item_changed)
+
+        # --- Add Clear Queue button here ---
+        self.clear_queue_btn = QPushButton("Clear Queue")
+        self.clear_queue_btn.clicked.connect(self.clear_queue)
+        self.layout.addWidget(self.clear_queue_btn)
+        # --- End addition ---
 
         self.output_label = QLabel("Output Folder:")
         self.layout.addWidget(self.output_label)
@@ -141,13 +149,13 @@ class FFmpegGUI(QWidget):
             file = url.toLocalFile()
             if os.path.isdir(file):
                 folder_name = os.path.basename(os.path.normpath(file))
-                existing_paths = [self.input_tree.topLevelItem(i).data(
-                    0, Qt.ItemDataRole.UserRole) for i in range(self.input_tree.topLevelItemCount())]
+                existing_paths = [self.input_tree.topLevelItem(i).data(0, Qt.ItemDataRole.UserRole) for i in range(self.input_tree.topLevelItemCount())]
                 if file not in existing_paths:
                     item = QTreeWidgetItem(["", folder_name, "tk01", "No audio", ""])
                     item.setFlags(item.flags() | Qt.ItemFlag.ItemIsDropEnabled | Qt.ItemFlag.ItemIsEditable)
                     item.setData(1, Qt.ItemDataRole.UserRole, file)
-                    item.setData(2, Qt.ItemDataRole.UserRole, None)
+                    item.setData(2, Qt.ItemDataRole.UserRole, "tk01")  # Take number
+                    item.setData(3, Qt.ItemDataRole.UserRole, None)    # Audio
                     self.input_tree.addTopLevelItem(item)
                     self._set_remove_button(item)
                     self._set_audio_button(item)
@@ -176,22 +184,19 @@ class FFmpegGUI(QWidget):
         btn = QPushButton("Add Audio")
         btn.setFixedSize(QSize(90, 22))
         btn.clicked.connect(lambda: self._browse_audio(item))
-        self.input_tree.setItemWidget(item, 2, btn)
+        self.input_tree.setItemWidget(item, 3, btn)
 
     def _set_remove_audio_button(self, item, filename):
         widget = QWidget()
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
-
         label = QLabel(filename)
         label.setStyleSheet("color: green;")
         layout.addWidget(label)
-
         btn = QPushButton()
         btn.setFixedSize(QSize(22, 22))
-        btn.setStyleSheet(
-            "QPushButton { border: none; background: transparent; }")
+        btn.setStyleSheet("QPushButton { border: none; background: transparent; }")
         pixmap = QPixmap(16, 16)
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
@@ -204,9 +209,8 @@ class FFmpegGUI(QWidget):
         btn.setIconSize(QSize(16, 16))
         btn.clicked.connect(lambda: self._remove_audio(item))
         layout.addWidget(btn)
-
         widget.setLayout(layout)
-        self.input_tree.setItemWidget(item, 2, widget)
+        self.input_tree.setItemWidget(item, 3, widget)
 
     def _browse_audio(self, item):
         image_folder = item.data(1, Qt.ItemDataRole.UserRole)
@@ -220,15 +224,28 @@ class FFmpegGUI(QWidget):
             "Audio/Video Files (*.wav *.mp3 *.aac *.flac *.m4a *.ogg *.mp4 *.mov *.mkv *.avi *.webm *.m4v)", options=options)
         if file:
             has_audio = self._audio_file_has_audio(file)
-            item.setData(2, Qt.ItemDataRole.UserRole,
-                         file if has_audio else None)
+            item.setData(3, Qt.ItemDataRole.UserRole, file if has_audio else None)
             filename = os.path.basename(file)
-            if has_audio:
-                item.setText(2, filename)
-                item.setForeground(2, QColor())
+            # 2 & 3. Extract and format take number
+            take_match = re.search(r'tk(\d{2})', filename, re.IGNORECASE)
+            if take_match:
+                num = int(take_match.group(1))
+                take_number = f"tk{num+1:02d}"
             else:
-                item.setText(2, filename)
-                item.setForeground(2, QColor("red"))
+                # Prompt user for take number (just digits)
+                take_number, ok = QInputDialog.getText(self, "Take Number", "Enter take number (digits only, e.g., 1):")
+                if ok and take_number.isdigit():
+                    take_number = f"tk{int(take_number):02d}"
+                else:
+                    take_number = "tk01"
+            item.setText(2, take_number)
+            item.setData(2, Qt.ItemDataRole.UserRole, take_number)
+            if has_audio:
+                item.setText(3, filename)
+                item.setForeground(3, QColor())
+            else:
+                item.setText(3, filename)
+                item.setForeground(3, QColor("red"))
             self._set_remove_audio_button(item, filename)
             self._update_preview_filename(item)
 
@@ -256,9 +273,9 @@ class FFmpegGUI(QWidget):
     # self.preset_combo.currentIndexChanged.connect(self.update_all_previews)
 
     def _remove_audio(self, item):
-        item.setData(2, Qt.ItemDataRole.UserRole, None)
-        item.setText(2, "No audio")
-        item.setForeground(2, QColor())
+        item.setData(3, Qt.ItemDataRole.UserRole, None)
+        item.setText(3, "No audio")
+        item.setForeground(3, QColor())
         self._set_audio_button(item)
 
     def _on_item_changed(self, item, column):
@@ -283,6 +300,9 @@ class FFmpegGUI(QWidget):
         if folder:
             self.output_path.setText(folder)
 
+    def clear_queue(self):
+        self.input_tree.clear()
+
     def _audio_file_has_audio(self, file):
         try:
             result = subprocess.run(
@@ -299,30 +319,29 @@ class FFmpegGUI(QWidget):
         fps = self.fps_input.text()
         hwaccel = self.hwaccel_combo.currentText()
         preset = self.preset_combo.currentText()
+        task_code = self.task_input.text().strip()
 
         if not os.path.isdir(output_dir):
             QMessageBox.critical(self, "Error", "Invalid output folder.")
             return
 
-        items = [self.input_tree.topLevelItem(i) for i in range(
-            self.input_tree.topLevelItemCount())]
+        items = [self.input_tree.topLevelItem(i) for i in range(self.input_tree.topLevelItemCount())]
         if not items:
             QMessageBox.critical(self, "Error", "No input folders selected.")
             return
 
         for item in items:
             folder = item.data(1, Qt.ItemDataRole.UserRole)
-            audio_file = item.data(2, Qt.ItemDataRole.UserRole)
+            audio_file = item.data(3, Qt.ItemDataRole.UserRole)
+            take_number = item.data(2, Qt.ItemDataRole.UserRole)
             self.status_label.setText(f"Rendering: {folder}")
             QApplication.processEvents()
-            success, error_msg = self.run_ffmpeg(
-                folder, output_dir, fps, hwaccel, preset, audio_file)
+            success, error_msg = self.run_ffmpeg(folder, output_dir, fps, hwaccel, preset, audio_file, take_number, task_code)
             if success:
                 self.set_item_checkmark(item)
             else:
                 folder_name = os.path.basename(folder)
-                QMessageBox.critical(
-                    self, "Error", f"Failed rendering: {folder_name}\n\nError:\n{error_msg}")
+                QMessageBox.critical(self, "Error", f"Failed rendering: {folder_name}\n\nError:\n{error_msg}")
                 self.status_label.setText(f"Error rendering: {folder_name}")
                 return  # Abort further operations
         self.status_label.setText("All renders finished.")
@@ -348,7 +367,7 @@ class FFmpegGUI(QWidget):
             self.toggle_output_btn.setText("Show FFmpeg Output")
             self.ffmpeg_output.setVisible(False)
 
-    def run_ffmpeg(self, input_dir, output_dir, fps, hwaccel, preset, audio_file=None):
+    def run_ffmpeg(self, input_dir, output_dir, fps, hwaccel, preset, audio_file=None, take_number="tk01", task_code="TASK"):
         files = sorted([f for f in os.listdir(input_dir) if f.lower().endswith(
             ('.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff'))])
         if not files:
@@ -366,18 +385,30 @@ class FFmpegGUI(QWidget):
         input_pattern = os.path.join(input_dir, pattern)
         base_name = os.path.basename(os.path.normpath(input_dir))
 
+        # Increment take number if audio had one
+        if take_number and re.match(r'tk\d{2}', take_number, re.IGNORECASE):
+            try:
+                num = int(take_number[2:])
+                take_number_out = f"tk{num+1:02d}"
+            except Exception:
+                take_number_out = take_number
+        else:
+            take_number_out = take_number or "tk01"
+
+        # Use task_code or default
+        task_code_out = task_code if task_code else "TASK"
+
+        # Choose extension based on preset
         if preset == "ProRes MOV - 422 Standard":
-            output_file = os.path.join(
-                output_dir, f"{base_name}_prores422.mov")
+            ext = "mov"
             codec = "prores_ks"
             ffmpeg_args = ["-profile:v", "3"]
         elif preset == "ProRes MOV - 422 Proxy":
-            output_file = os.path.join(
-                output_dir, f"{base_name}_prores422proxy.mov")
+            ext = "mov"
             codec = "prores_ks"
             ffmpeg_args = ["-profile:v", "0"]
         elif preset == "Preview MP4 - H.264 25Mbps":
-            output_file = os.path.join(output_dir, f"{base_name}_h264.mp4")
+            ext = "mp4"
             use_nvenc = False
             if hwaccel == "NVIDIA (h264_nvenc)":
                 use_nvenc = True
@@ -392,9 +423,15 @@ class FFmpegGUI(QWidget):
             codec = "h264_nvenc" if use_nvenc else "libx264"
             ffmpeg_args = ["-b:v", "25M"]
         else:
-            output_file = os.path.join(output_dir, f"{base_name}.mp4")
+            ext = "mp4"
             codec = "libx264"
             ffmpeg_args = []
+
+        # Build output filename
+        output_file = os.path.join(
+            output_dir,
+            f"{base_name}_{take_number}_{task_code_out}.{ext}"
+        )
 
         cmd = [
             "ffmpeg",
