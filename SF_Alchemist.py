@@ -1,7 +1,12 @@
+import subprocess
 import sys
 import os
-import subprocess
 import re
+
+if sys.platform == "win32":
+    CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW
+else:
+    CREATE_NO_WINDOW = 0
 
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog,
@@ -308,7 +313,10 @@ class FFmpegGUI(QWidget):
             result = subprocess.run(
                 ["ffprobe", "-v", "error", "-select_streams", "a",
                     "-show_entries", "stream=codec_type", "-of", "csv=p=0", file],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                creationflags=CREATE_NO_WINDOW
             )
             return "audio" in result.stdout
         except Exception:
@@ -414,8 +422,11 @@ class FFmpegGUI(QWidget):
                 use_nvenc = True
             elif hwaccel == "Auto-detect":
                 try:
-                    result = subprocess.run(['ffmpeg', '-hide_banner', '-encoders'],
-                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    result = subprocess.run(
+                        ['ffmpeg', '-hide_banner', '-encoders'],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                        creationflags=CREATE_NO_WINDOW  # <-- Add this line
+                    )
                     if "h264_nvenc" in result.stdout:
                         use_nvenc = True
                 except Exception:
@@ -458,7 +469,8 @@ class FFmpegGUI(QWidget):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                creationflags=CREATE_NO_WINDOW
             )
             output_lines = []
             for line in process.stdout:
