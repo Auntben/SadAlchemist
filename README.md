@@ -14,3 +14,9 @@ The files will be named with this nomenclature: <Folder Name>_<Take Number>_<Tas
 - Changeable Frame Rate for Renders (default: 24fps)
 - Nvidia Hardware Accelerated Encoding for MP4 with Auto-Detection for compatibility
 - 3 Encoding Presets: h.264 MP4 at 15MBPS, Apple ProRes Proxy, Apple ProRes 422
+
+## Built With
+Windows:
+```
+pyinstaller -F --noconsole --icon=SadAlchemist.ico --add-data "SadAlchemist.ico;." SadAlchemist.py
+```
