@@ -2,6 +2,13 @@ import subprocess
 import sys
 import os
 import re
+from PyQt6.QtGui import QIcon, QFont, QColor, QPixmap, QPainter
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.dirname(__file__), relative_path)
 
 if sys.platform == "win32":
     CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW
@@ -14,7 +21,6 @@ from PyQt6.QtWidgets import (
     QTextEdit, QInputDialog
 )
 from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QIcon, QColor, QPixmap, QPainter, QFont
 
 
 class FFmpegGUI(QWidget):
@@ -23,6 +29,7 @@ class FFmpegGUI(QWidget):
 
     def __init__(self):
         super().__init__()
+        self.setWindowIcon(QIcon(resource_path("SadAlchemist.ico")))
         self.resize(800, 800)
         self.setWindowTitle("SadAlchemist v25.0")
         self.layout = QVBoxLayout()
@@ -488,6 +495,7 @@ class FFmpegGUI(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(resource_path("SadAlchemist.ico")))
     window = FFmpegGUI()
     window.show()
     sys.exit(app.exec())
