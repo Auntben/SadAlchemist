@@ -19,11 +19,11 @@ class FFmpegGUI(QWidget):
     def __init__(self):
         super().__init__()
         self.resize(800, 800)
-        self.setWindowTitle("Sadfish Alchemist 2025.1")
+        self.setWindowTitle("SadAlchemist v25.0")
         self.layout = QVBoxLayout()
 
         # --- Add large title at the very top ---
-        self.title_label = QLabel("SadFish Alchemist v25.0")
+        self.title_label = QLabel("SadAlchemist v25.0")
         font = QFont()
         font.setPointSize(20)
         font.setBold(True)
