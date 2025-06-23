@@ -3,6 +3,7 @@ import sys
 import os
 import re
 from PyQt6.QtGui import QIcon, QFont, QColor, QPixmap, QPainter
+from PyQt6.QtWidgets import QProgressBar, QStackedLayout, QWidget
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -133,8 +134,32 @@ class FFmpegGUI(QWidget):
         self.run_btn.clicked.connect(self.run_ffmpeg_batch)
         self.layout.addWidget(self.run_btn)
 
+        # --- Status bar with progress ---
+        self.status_widget = QWidget()
+        self.status_layout = QVBoxLayout()
+        self.status_widget.setLayout(self.status_layout)
+
         self.status_label = QLabel("")
-        self.layout.addWidget(self.status_label)
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setStyleSheet("font-weight: bold; background: transparent;")
+        self.status_layout.addWidget(self.status_label)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setFixedHeight(14)  # Make it thinner
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #bbb;
+                border-radius: 5px;
+                background: #eee;
+            }
+            QProgressBar::chunk {
+                background-color: #4caf50;
+            }
+        """)
+        self.status_layout.addWidget(self.progress_bar)
+        self.layout.addWidget(self.status_widget)
+        # --- End status bar with progress ---
 
         self.toggle_output_btn = QPushButton("Show FFmpeg Output")
         self.toggle_output_btn.setCheckable(True)
@@ -393,6 +418,11 @@ class FFmpegGUI(QWidget):
         if not files:
             return False, "No image files found."
 
+        total_frames = len(files)
+        self.progress_bar.setMaximum(total_frames)
+        self.progress_bar.setValue(0)
+        self.status_label.setText(f"Rendering: {os.path.basename(input_dir)}")
+
         pattern = None
         match = re.match(r"(.*?)(\d+)(\.[^.]+)$", files[0])
         if match:
@@ -485,11 +515,18 @@ class FFmpegGUI(QWidget):
                 creationflags=CREATE_NO_WINDOW
             )
             output_lines = []
+            current_frame = 0
             for line in process.stdout:
                 self.ffmpeg_output.append(line.rstrip())
                 output_lines.append(line.rstrip())
+                # Parse frame number from ffmpeg output
+                frame_match = re.search(r'frame=\s*(\d+)', line)
+                if frame_match:
+                    current_frame = int(frame_match.group(1))
+                    self.progress_bar.setValue(min(current_frame, total_frames))
                 QApplication.processEvents()
             process.wait()
+            self.progress_bar.setValue(total_frames)
             if process.returncode == 0:
                 return True, ""
             else:
