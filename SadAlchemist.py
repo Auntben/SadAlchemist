@@ -31,11 +31,11 @@ class FFmpegGUI(QWidget):
         super().__init__()
         self.setWindowIcon(QIcon(resource_path("SadAlchemist.ico")))
         self.resize(800, 800)
-        self.setWindowTitle("SadAlchemist v25.0")
+        self.setWindowTitle("SadAlchemist v25.1")
         self.layout = QVBoxLayout()
 
         # --- Add large title at the very top ---
-        self.title_label = QLabel("SadAlchemist v25.0")
+        self.title_label = QLabel("SadAlchemist v25.1")
         font = QFont()
         font.setPointSize(20)
         font.setBold(True)
@@ -290,6 +290,11 @@ class FFmpegGUI(QWidget):
         item.setForeground(3, QColor())
         self._set_audio_button(item)
 
+    def _remove_item(self, item):
+        idx = self.input_tree.indexOfTopLevelItem(item)
+        if idx != -1:
+            self.input_tree.takeTopLevelItem(idx)
+
     def _on_item_changed(self, item, column):
         # Ensure take number is always formatted as tkXX
         if column == 2:
@@ -384,7 +389,7 @@ class FFmpegGUI(QWidget):
 
     def run_ffmpeg(self, input_dir, output_dir, fps, hwaccel, preset, audio_file=None, take_number="tk01", task_code="TASK"):
         files = sorted([f for f in os.listdir(input_dir) if f.lower().endswith(
-            ('.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff'))])
+            ('.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff', '.exr'))])
         if not files:
             return False, "No image files found."
 
