@@ -20,3 +20,4 @@ Windows:
 ```
 pyinstaller -F --noconsole --icon=SadAlchemist.ico --add-data "SadAlchemist.ico;." SadAlchemist.py
 ```
+Do this with venv active.
