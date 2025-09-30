@@ -11,6 +11,12 @@ def resource_path(relative_path):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.dirname(__file__), relative_path)
 
+def ffmpeg_path():
+    return resource_path(os.path.join("ffmpeg_bin", "ffmpeg.exe"))
+
+def ffprobe_path():
+    return resource_path(os.path.join("ffmpeg_bin", "ffprobe.exe"))
+
 if sys.platform == "win32":
     CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW
 else:
@@ -32,11 +38,11 @@ class FFmpegGUI(QWidget):
         super().__init__()
         self.setWindowIcon(QIcon(resource_path("SadAlchemist.ico")))
         self.resize(800, 800)
-        self.setWindowTitle("SadAlchemist v25.1")
+        self.setWindowTitle("SadAlchemist v25.2")
         self.layout = QVBoxLayout()
 
         # --- Add large title at the very top ---
-        self.title_label = QLabel("SadAlchemist v25.1")
+        self.title_label = QLabel("SadAlchemist v25.2")
         font = QFont()
         font.setPointSize(20)
         font.setBold(True)
@@ -348,7 +354,7 @@ class FFmpegGUI(QWidget):
     def _audio_file_has_audio(self, file):
         try:
             result = subprocess.run(
-                ["ffprobe", "-v", "error", "-select_streams", "a",
+                ["ffprobe_path()", "-v", "error", "-select_streams", "a",
                     "-show_entries", "stream=codec_type", "-of", "csv=p=0", file],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -465,7 +471,7 @@ class FFmpegGUI(QWidget):
             elif hwaccel == "Auto-detect":
                 try:
                     result = subprocess.run(
-                        ['ffmpeg', '-hide_banner', '-encoders'],
+                        ['ffmpeg_path()', '-hide_banner', '-encoders'],
                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                         creationflags=CREATE_NO_WINDOW  # <-- Add this line
                     )
