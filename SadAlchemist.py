@@ -47,11 +47,11 @@ class FFmpegGUI(QWidget):
         super().__init__()
         self.setWindowIcon(QIcon(resource_path("SadAlchemist.ico")))
         self.resize(800, 800)
-        self.setWindowTitle("SadAlchemist v25.2")
+        self.setWindowTitle("SadAlchemist v25.3")
         self.layout = QVBoxLayout()
 
         # --- Add large title at the very top ---
-        self.title_label = QLabel("SadAlchemist v25.2")
+        self.title_label = QLabel("SadAlchemist v25.3")
         font = QFont()
         font.setPointSize(20)
         font.setBold(True)
@@ -185,6 +185,13 @@ class FFmpegGUI(QWidget):
         self.ffmpeg_output.setReadOnly(True)
         self.ffmpeg_output.setVisible(False)
         self.layout.addWidget(self.ffmpeg_output)
+
+        # --- Show Output Folder button ---
+        self.show_output_btn = QPushButton("Show Output Folder")
+        self.show_output_btn.setVisible(False)
+        self.show_output_btn.clicked.connect(self.open_output_folder)
+        self.layout.addWidget(self.show_output_btn)
+        # --- End addition ---
 
         self.setLayout(self.layout)
         self.setAcceptDrops(True)
@@ -410,6 +417,7 @@ class FFmpegGUI(QWidget):
                 self.status_label.setText(f"Error rendering: {folder_name}")
                 return  # Abort further operations
         self.status_label.setText("All renders finished.")
+        self.show_output_btn.setVisible(True)
 
     def set_item_checkmark(self, item):
         # Add a green checkmark icon to the folder column
@@ -431,6 +439,13 @@ class FFmpegGUI(QWidget):
         else:
             self.toggle_output_btn.setText("Show FFmpeg Output")
             self.ffmpeg_output.setVisible(False)
+
+    def open_output_folder(self):
+        folder = self.output_path.text()
+        if os.path.isdir(folder):
+            os.startfile(folder)
+        else:
+            QMessageBox.warning(self, "Warning", "Output folder does not exist.")
 
     def run_ffmpeg(self, input_dir, output_dir, fps, hwaccel, preset, audio_file=None, take_number="tk01", task_code="TASK"):
         files = sorted([f for f in os.listdir(input_dir) if f.lower().endswith(
@@ -484,15 +499,35 @@ class FFmpegGUI(QWidget):
                 use_nvenc = True
             elif hwaccel == "Auto-detect":
                 try:
+                    # Check if h264_nvenc is available
                     result = subprocess.run(
                         [ffmpeg_path(), '-hide_banner', '-encoders'],
                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                        creationflags=CREATE_NO_WINDOW  # <-- Add this line
+                        creationflags=CREATE_NO_WINDOW
                     )
                     if "h264_nvenc" in result.stdout:
-                        use_nvenc = True
+                        # Test if nvenc actually works
+                        test_cmd = [
+                            ffmpeg_path(),
+                            "-f", "lavfi",
+                            "-i", "testsrc=duration=1:size=128x128:rate=1",
+                            "-c:v", "h264_nvenc",
+                            "-f", "null",
+                            "-"
+                        ]
+                        test_result = subprocess.run(
+                            test_cmd,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                            creationflags=CREATE_NO_WINDOW
+                        )
+                        if test_result.returncode == 0:
+                            use_nvenc = True
+                        else:
+                            use_nvenc = False  # Fallback to CPU if nvenc fails
+                    else:
+                        use_nvenc = False
                 except Exception:
-                    pass
+                    use_nvenc = False
             codec = "h264_nvenc" if use_nvenc else "libx264"
             ffmpeg_args = ["-b:v", "25M"]
         else:
