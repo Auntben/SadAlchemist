@@ -3,7 +3,7 @@ import sys
 import os
 import re
 from PyQt6.QtGui import QIcon, QFont, QColor, QPixmap, QPainter
-from PyQt6.QtWidgets import QProgressBar, QStackedLayout, QWidget
+from PyQt6.QtWidgets import QProgressBar, QStackedLayout, QWidget, QMessageBox
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -12,10 +12,19 @@ def resource_path(relative_path):
     return os.path.join(os.path.dirname(__file__), relative_path)
 
 def ffmpeg_path():
-    return resource_path(os.path.join("ffmpeg_bin", "ffmpeg.exe"))
+    path = resource_path(os.path.join("ffmpeg_bin", "ffmpeg.exe"))
+    if not os.path.exists(path):
+        QMessageBox.critical(None, "Error", f"ffmpeg.exe not found at: {path}")
+    return path
 
 def ffprobe_path():
-    return resource_path(os.path.join("ffmpeg_bin", "ffprobe.exe"))
+    path = resource_path(os.path.join("ffmpeg_bin", "ffprobe.exe"))
+    if not os.path.exists(path):
+        QMessageBox.critical(None, "Error", f"ffprobe.exe not found at: {path}")
+    return path
+print("ffmpeg and ffprobe paths:")
+print(ffmpeg_path())
+print(ffprobe_path())
 
 if sys.platform == "win32":
     CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW
@@ -224,12 +233,17 @@ class FFmpegGUI(QWidget):
         self.input_tree.setItemWidget(item, 0, remove_btn)
 
     def _set_audio_button(self, item):
+        item.setText(3, "")           # Clear text
+        item.setForeground(3, QColor())  # Clear color
         btn = QPushButton("Add Audio")
         btn.setFixedSize(QSize(90, 22))
         btn.clicked.connect(lambda: self._browse_audio(item))
         self.input_tree.setItemWidget(item, 3, btn)
 
     def _set_remove_audio_button(self, item, filename):
+        # Clear text and foreground before adding widget
+        item.setText(3, "")
+        item.setForeground(3, QColor())
         widget = QWidget()
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -285,7 +299,7 @@ class FFmpegGUI(QWidget):
             item.setData(2, Qt.ItemDataRole.UserRole, take_number)
             if has_audio:
                 item.setText(3, filename)
-                item.setForeground(3, QColor())
+                item.setForeground(3, QColor("green"))
             else:
                 item.setText(3, filename)
                 item.setForeground(3, QColor("red"))
@@ -354,7 +368,7 @@ class FFmpegGUI(QWidget):
     def _audio_file_has_audio(self, file):
         try:
             result = subprocess.run(
-                ["ffprobe_path()", "-v", "error", "-select_streams", "a",
+                [ffprobe_path(), "-v", "error", "-select_streams", "a",
                     "-show_entries", "stream=codec_type", "-of", "csv=p=0", file],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -471,7 +485,7 @@ class FFmpegGUI(QWidget):
             elif hwaccel == "Auto-detect":
                 try:
                     result = subprocess.run(
-                        ['ffmpeg_path()', '-hide_banner', '-encoders'],
+                        [ffmpeg_path(), '-hide_banner', '-encoders'],
                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                         creationflags=CREATE_NO_WINDOW  # <-- Add this line
                     )
@@ -493,7 +507,7 @@ class FFmpegGUI(QWidget):
         )
 
         cmd = [
-            "ffmpeg",
+            ffmpeg_path(),  # <-- Use the function, not the string
             "-framerate", fps,
             "-i", input_pattern,
         ]
