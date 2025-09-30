@@ -1,7 +1,7 @@
 # SadAlchemist
 A quick tool to convert an image sequence into a video file using FFMPEG. 
 
-The files will be named with this nomenclature: <Folder Name>_<Take Number>_<Task Code>
+The files will be named with this nomenclature: Folder Name_Take Number_Task Code
 
 ## Features:
 - Drag and Drop image sequence folders to create render queue.
@@ -14,10 +14,14 @@ The files will be named with this nomenclature: <Folder Name>_<Take Number>_<Tas
 - Changeable Frame Rate for Renders (default: 24fps)
 - Nvidia Hardware Accelerated Encoding for MP4 with Auto-Detection for compatibility
 - 3 Encoding Presets: h.264 MP4 at 15MBPS, Apple ProRes Proxy, Apple ProRes 422
+- FFMPEG and FFPROBE included within the build
 
 ## Built With
 Windows:
 ```
-pyinstaller -F --noconsole --icon=SadAlchemist.ico --add-data "SadAlchemist.ico;." SadAlchemist.py
+pyinstaller -F --noconsole --icon=SadAlchemist.ico --add-data "ffmpeg_bin/ffmpeg.exe;ffmpeg_bin" --add-data "ffmpeg_bin/ffprobe.exe;ffmpeg_bin" --add-data "SadAlchemist.ico;." SadAlchemist.py
 ```
 Do this with venv active.
+
+Make sure there's a ffmpeg.exe and ffprobe.exe in the ffmpeg_bin folder. You can get the latest versions at https://www.gyan.dev/ffmpeg/builds/
+Choose "release full" ZIP
