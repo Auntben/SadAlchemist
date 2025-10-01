@@ -19,9 +19,16 @@ The files will be named with this nomenclature: Folder Name_Take Number_Task Cod
 ## Built With
 Windows:
 ```
-pyinstaller -F --noconsole --icon=SadAlchemist.ico --add-data "ffmpeg_bin/ffmpeg.exe;ffmpeg_bin" --add-data "ffmpeg_bin/ffprobe.exe;ffmpeg_bin" --add-data "SadAlchemist.ico;." SadAlchemist.py
+pyinstaller -F --noconsole --icon=SadAlchemist.ico --add-data "ffmpeg_win/ffmpeg.exe;bin" --add-data "ffmpeg_win/ffprobe.exe;bin" --add-data "SadAlchemist.ico;." SadAlchemist.py
 ```
 Do this with venv active.
 
-Make sure there's a ffmpeg.exe and ffprobe.exe in the ffmpeg_bin folder. You can get the latest versions at https://www.gyan.dev/ffmpeg/builds/
+Make sure there's a ffmpeg.exe and ffprobe.exe in the ffmpeg_win folder. You can get the latest versions at https://www.gyan.dev/ffmpeg/builds/
 Choose "release full" ZIP
+
+OSX:
+```
+pyinstaller --noconfirm --add-binary="/opt/homebrew/bin/ffmpeg:bin" --add-binary="/opt/homebrew/bin/ffprobe:bin" --osx-bundle-identifier ca.sadfish.sadalchemist --icon=SadAlchemist.ico --add-data "SadAlchemist.ico:." -w SadAlchemist.py
+```
+
+You will need to have ffmpeg and ffprobe installed via the ffmpeg homebrew package.

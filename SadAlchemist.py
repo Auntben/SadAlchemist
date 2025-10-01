@@ -11,17 +11,30 @@ def resource_path(relative_path):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(os.path.dirname(__file__), relative_path)
 
+def ffmpeg_binary():
+    if sys.platform == "win32":
+        return "ffmpeg.exe"
+    else:
+        return "ffmpeg"
+
+def ffprobe_binary():
+    if sys.platform == "win32":
+        return "ffprobe.exe"
+    else:
+        return "ffprobe"
+
 def ffmpeg_path():
-    path = resource_path(os.path.join("ffmpeg_bin", "ffmpeg.exe"))
+    path = resource_path(os.path.join("bin", ffmpeg_binary()))
     if not os.path.exists(path):
-        QMessageBox.critical(None, "Error", f"ffmpeg.exe not found at: {path}")
+        QMessageBox.critical(None, "Error", f"{ffmpeg_binary()} not found at: {path}")
     return path
 
 def ffprobe_path():
-    path = resource_path(os.path.join("ffmpeg_bin", "ffprobe.exe"))
+    path = resource_path(os.path.join("bin", ffprobe_binary()))
     if not os.path.exists(path):
-        QMessageBox.critical(None, "Error", f"ffprobe.exe not found at: {path}")
+        QMessageBox.critical(None, "Error", f"{ffprobe_binary()} not found at: {path}")
     return path
+
 print("ffmpeg and ffprobe paths:")
 print(ffmpeg_path())
 print(ffprobe_path())
@@ -47,11 +60,11 @@ class FFmpegGUI(QWidget):
         super().__init__()
         self.setWindowIcon(QIcon(resource_path("SadAlchemist.ico")))
         self.resize(800, 800)
-        self.setWindowTitle("SadAlchemist v25.3")
+        self.setWindowTitle("SadAlchemist v25.4")
         self.layout = QVBoxLayout()
 
         # --- Add large title at the very top ---
-        self.title_label = QLabel("SadAlchemist v25.3")
+        self.title_label = QLabel("SadAlchemist v25.4")
         font = QFont()
         font.setPointSize(20)
         font.setBold(True)
