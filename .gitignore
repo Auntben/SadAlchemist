@@ -5,7 +5,5 @@ __pycache__/
 /dist
 SF_Alchemist.spec
 *.spec
-ffmepg_bin/ffmpeg.exe
-ffmepg_bin/ffprobe.exe
-ffmpeg_bin/ffmpeg.exe
-ffmpeg_bin/ffprobe.exe
+ffmepg_win/*
+ffmepg_osx/*
