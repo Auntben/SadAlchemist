@@ -60,7 +60,7 @@ class FFmpegGUI(QWidget):
         super().__init__()
         self.setWindowIcon(QIcon(resource_path("SadAlchemist.ico")))
         self.resize(800, 800)
-        self.setWindowTitle("SadAlchemist v25.3")
+        self.setWindowTitle("SadAlchemist v25.4")
         self.layout = QVBoxLayout()
 
         # --- Add large title at the very top ---

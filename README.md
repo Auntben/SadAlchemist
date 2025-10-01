@@ -28,7 +28,7 @@ Choose "release full" ZIP
 
 OSX:
 ```
-pyinstaller --noconfirm --add-binary="./ffmpeg_osx/ffmpeg:bin"  --add-binary="./ffmpeg_osx/ffprobe:bin" --osx-bundle-identifier ca.sadfish.sadalchemist --icon=SadAlchemist.ico --add-data "SadAlchemist.ico:." -w SadAlchemist.py
+pyinstaller --noconfirm --add-binary="/opt/homebrew/bin/ffmpeg:bin" --add-binary="/opt/homebrew/bin/ffprobe:bin" --osx-bundle-identifier ca.sadfish.sadalchemist --icon=SadAlchemist.ico --add-data "SadAlchemist.ico:." -w SadAlchemist.py
 ```
 
-Make sure there's a ffmpeg and ffprobe in the ffmpeg_osx folder. You can get the latest versions at https://evermeet.cx/ffmpeg/
+You will need to have ffmpeg and ffprobe installed via the ffmpeg homebrew package.
