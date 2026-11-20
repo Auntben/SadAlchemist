@@ -3,9 +3,8 @@ test.py
 __pycache__/
 /build
 /dist
-SF_Alchemist.spec
 *.spec
-ffmepg_win/*
-ffmepg_osx/*
-ffmpeg_bin/ffmpeg.exe
-ffmpeg_bin/ffprobe.exe
+ffmpeg_win/*.exe
+ffmpeg_osx/ffmpeg
+ffmpeg_osx/ffprobe
+ffmpeg_bin/
