@@ -7,3 +7,5 @@ SF_Alchemist.spec
 *.spec
 ffmepg_win/*
 ffmepg_osx/*
+ffmpeg_bin/ffmpeg.exe
+ffmpeg_bin/ffprobe.exe
